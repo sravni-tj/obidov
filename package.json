@@ -1,0 +1,88 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session, joinedload
+from typing import Optional
+from app.database import get_db
+from app.models.models import Product
+
+router = APIRouter()
+
+@router.get("/deposits")
+def compare_deposits(
+    currency: str = Query("TJS"),
+    term_months: Optional[int] = Query(None),
+    amount: Optional[float] = Query(None),
+    sort_by: str = Query("rate_max"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Product).options(joinedload(Product.bank)).filter(
+        Product.type == "deposit",
+        Product.currency == currency,
+        Product.is_active == True
+    )
+    if term_months:
+        query = query.filter(
+            (Product.term_min_months <= term_months) | (Product.term_min_months == None),
+            (Product.term_max_months >= term_months) | (Product.term_max_months == None)
+        )
+    if amount:
+        query = query.filter(
+            (Product.amount_min <= amount) | (Product.amount_min == None),
+            (Product.amount_max >= amount) | (Product.amount_max == None)
+        )
+    products = query.all()
+    result = []
+    for p in products:
+        result.append({
+            "id": p.id,
+            "bank_name": p.bank.name if p.bank else "",
+            "bank_logo": p.bank.logo_url if p.bank else None,
+            "name": p.name,
+            "currency": p.currency,
+            "rate_min": p.rate_min,
+            "rate_max": p.rate_max,
+            "term_min_months": p.term_min_months,
+            "term_max_months": p.term_max_months,
+            "amount_min": p.amount_min,
+            "amount_max": p.amount_max,
+            "early_withdrawal": p.early_withdrawal,
+            "capitalization": p.capitalization,
+            "insurance": p.insurance,
+        })
+    result.sort(key=lambda x: x.get(sort_by) or 0, reverse=True)
+    return result
+
+@router.get("/credits")
+def compare_credits(
+    currency: str = Query("TJS"),
+    term_months: Optional[int] = Query(None),
+    amount: Optional[float] = Query(None),
+    collateral: Optional[bool] = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Product).options(joinedload(Product.bank)).filter(
+        Product.type == "credit",
+        Product.currency == currency,
+        Product.is_active == True
+    )
+    if collateral is not None:
+        query = query.filter(Product.collateral_required == collateral)
+    products = query.all()
+    result = []
+    for p in products:
+        result.append({
+            "id": p.id,
+            "bank_name": p.bank.name if p.bank else "",
+            "bank_logo": p.bank.logo_url if p.bank else None,
+            "name": p.name,
+            "currency": p.currency,
+            "rate_min": p.rate_min,
+            "rate_max": p.rate_max,
+            "term_min_months": p.term_min_months,
+            "term_max_months": p.term_max_months,
+            "amount_min": p.amount_min,
+            "amount_max": p.amount_max,
+            "collateral_required": p.collateral_required,
+            "income_proof_required": p.income_proof_required,
+        })
+    result.sort(key=lambda x: x.get("rate_min") or 999)
+    return result

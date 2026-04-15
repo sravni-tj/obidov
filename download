@@ -1,0 +1,149 @@
+import { useEffect, useState } from 'react'
+import Layout from '../components/Layout'
+import axios from 'axios'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend } from 'recharts'
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+export default function Analytics() {
+  const [depositSummary, setDepositSummary] = useState(null)
+  const [creditSummary, setCreditSummary] = useState(null)
+  const [monthlyReport, setMonthlyReport] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/api/analytics/market-summary?product_type=deposit&currency=TJS`).catch(() => ({ data: null })),
+      axios.get(`${API}/api/analytics/market-summary?product_type=credit&currency=TJS`).catch(() => ({ data: null })),
+      axios.get(`${API}/api/analytics/monthly-report`).catch(() => ({ data: null })),
+    ]).then(([d, c, r]) => {
+      setDepositSummary(d.data)
+      setCreditSummary(c.data)
+      setMonthlyReport(r.data)
+      setLoading(false)
+    })
+  }, [])
+
+  const buildBarData = (summary) => {
+    if (!summary?.top_offers) return []
+    return summary.top_offers.map(o => ({
+      name: o.bank.replace('АО ', '').replace('ОАО ', '').replace('ЗАО ', '').replace('ООО ', '').substring(0, 12),
+      rate: o.rate_max,
+    }))
+  }
+
+  return (
+    <Layout title="Аналитика рынка">
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h1 style={{ margin: '0 0 4px', fontSize: 28 }}>Аналитика банковского рынка</h1>
+            <p style={{ color: '#6b7280', margin: 0 }}>
+              Автоматически генерируется из данных всех банков · {new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+          <div style={{
+            background: '#d1fae5', color: '#065f46',
+            padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500
+          }}>
+            Обновлено сегодня
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="card" style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>Загрузка аналитики...</div>
+        ) : (
+          <>
+            {/* Summary metrics */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16, marginBottom: '2rem' }}>
+              {[
+                { label: 'Банков участвует', value: depositSummary?.banks_count || '—', sub: 'в сравнении депозитов', color: '#1a56db' },
+                { label: 'Средняя ставка депозит', value: depositSummary?.avg_rate ? `${depositSummary.avg_rate}%` : '—', sub: 'в сомони', color: '#059669' },
+                { label: 'Максимальная ставка', value: depositSummary?.max_rate ? `${depositSummary.max_rate}%` : '—', sub: 'лучшее предложение', color: '#059669' },
+                { label: 'Мин. ставка кредита', value: creditSummary?.min_rate ? `${creditSummary.min_rate}%` : '—', sub: 'годовых', color: '#dc2626' },
+              ].map((m, i) => (
+                <div key={i} className="card" style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>{m.label}</div>
+                  <div style={{ fontSize: 36, fontWeight: 800, color: m.color, lineHeight: 1, marginBottom: 4 }}>{m.value}</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{m.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Charts */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: '2rem' }}>
+              <div className="card">
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Топ депозитные ставки</div>
+                <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>Максимальные ставки по банкам, % годовых в TJS</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={buildBarData(depositSummary)} margin={{ left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} domain={[0, 25]} unit="%" />
+                    <Tooltip formatter={(v) => [`${v}%`, 'Ставка']} />
+                    <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+                      {buildBarData(depositSummary).map((_, i) => (
+                        <Cell key={i} fill={i === 0 ? '#059669' : i === 1 ? '#10b981' : '#6ee7b7'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="card">
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Топ кредитные ставки</div>
+                <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>Минимальные ставки по банкам, % годовых в TJS</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={buildBarData(creditSummary)} margin={{ left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} domain={[0, 35]} unit="%" />
+                    <Tooltip formatter={(v) => [`${v}%`, 'Ставка']} />
+                    <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+                      {buildBarData(creditSummary).map((_, i) => (
+                        <Cell key={i} fill={i === 0 ? '#dc2626' : i === 1 ? '#ef4444' : '#fca5a5'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Monthly report table */}
+            {monthlyReport?.report && (
+              <div className="card">
+                <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Сводный отчёт по рынку</div>
+                <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+                  Период: {monthlyReport.period} · Генерируется автоматически каждый месяц
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                  <thead>
+                    <tr style={{ background: '#f9fafb' }}>
+                      {['Тип продукта', 'Банков', 'Продуктов', 'Ср. ставка', 'Мин. ставка', 'Макс. ставка'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 500, borderBottom: '1px solid #e5e7eb' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(monthlyReport.report).map(([type, data]) => (
+                      <tr key={type} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '12px', fontWeight: 600 }}>
+                          {{ deposit: 'Депозиты', credit: 'Кредиты', card: 'Карты' }[type] || type}
+                        </td>
+                        <td style={{ padding: '12px' }}>{data.banks_count}</td>
+                        <td style={{ padding: '12px' }}>{data.products_count}</td>
+                        <td style={{ padding: '12px', fontWeight: 700, color: '#1a56db' }}>{data.avg_rate}%</td>
+                        <td style={{ padding: '12px', color: '#059669' }}>{data.min_rate}%</td>
+                        <td style={{ padding: '12px', color: '#dc2626' }}>{data.max_rate}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Layout>
+  )
+}

@@ -1,0 +1,144 @@
+import { useEffect, useState } from 'react'
+import Layout from '../components/Layout'
+import axios from 'axios'
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+export default function Deposits() {
+  const [deposits, setDeposits] = useState([])
+  const [filtered, setFiltered] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState({ currency: 'TJS', term: '', amount: '', sortBy: 'rate_max' })
+
+  useEffect(() => {
+    fetchDeposits()
+  }, [])
+
+  useEffect(() => {
+    applyFilters()
+  }, [deposits, filters])
+
+  const fetchDeposits = async () => {
+    try {
+      const params = new URLSearchParams({ currency: filters.currency })
+      const { data } = await axios.get(`${API}/api/compare/deposits?${params}`)
+      setDeposits(data)
+    } catch (e) {
+      setDeposits([])
+    }
+    setLoading(false)
+  }
+
+  const applyFilters = () => {
+    let result = [...deposits]
+    if (filters.term) {
+      result = result.filter(d =>
+        (!d.term_min_months || d.term_min_months <= parseInt(filters.term)) &&
+        (!d.term_max_months || d.term_max_months >= parseInt(filters.term))
+      )
+    }
+    if (filters.amount) {
+      result = result.filter(d =>
+        (!d.amount_min || d.amount_min <= parseFloat(filters.amount)) &&
+        (!d.amount_max || d.amount_max >= parseFloat(filters.amount))
+      )
+    }
+    result.sort((a, b) => (b[filters.sortBy] || 0) - (a[filters.sortBy] || 0))
+    setFiltered(result)
+  }
+
+  const F = filters
+  const set = (k, v) => setFilters(prev => ({ ...prev, [k]: v }))
+
+  return (
+    <Layout title="Сравнение депозитов">
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1rem' }}>
+        <h1 style={{ margin: '0 0 0.5rem', fontSize: 28 }}>Сравнение депозитов</h1>
+        <p style={{ color: '#6b7280', margin: '0 0 1.5rem' }}>
+          {filtered.length} предложений от банков Таджикистана · Данные обновляются автоматически
+        </p>
+
+        {/* Filters */}
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 16 }}>
+            <div>
+              <label style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>Валюта</label>
+              <select value={F.currency} onChange={e => { set('currency', e.target.value); fetchDeposits() }}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }}>
+                <option value="TJS">Сомони (TJS)</option>
+                <option value="USD">Доллар (USD)</option>
+                <option value="EUR">Евро (EUR)</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>Срок (месяцев)</label>
+              <input type="number" placeholder="Например: 12" value={F.term} onChange={e => set('term', e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>Сумма (TJS)</label>
+              <input type="number" placeholder="Например: 10000" value={F.amount} onChange={e => set('amount', e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>Сортировка</label>
+              <select value={F.sortBy} onChange={e => set('sortBy', e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }}>
+                <option value="rate_max">По максимальной ставке</option>
+                <option value="rate_min">По минимальной ставке</option>
+                <option value="term_max_months">По сроку</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="card" style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>Загрузка...</div>
+        ) : filtered.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+            Нет данных. Убедитесь что бэкенд запущен.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {filtered.map((d, i) => (
+              <div key={d.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '1.25rem' }}>
+                {/* Rank */}
+                <div style={{
+                  width: 36, height: 36, borderRadius: '50%',
+                  background: i === 0 ? '#fcd34d' : i === 1 ? '#e5e7eb' : i === 2 ? '#fed7aa' : '#f3f4f6',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 700, fontSize: 14, flexShrink: 0, color: '#374151'
+                }}>{i + 1}</div>
+
+                {/* Bank info */}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 2 }}>{d.bank_name}</div>
+                  <div style={{ fontSize: 14, color: '#374151', marginBottom: 4 }}>{d.name}</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="badge-blue">{d.currency}</span>
+                    {d.term_max_months && <span style={{ fontSize: 12, color: '#6b7280' }}>до {d.term_max_months} мес.</span>}
+                    {d.amount_min && <span style={{ fontSize: 12, color: '#6b7280' }}>от {d.amount_min?.toLocaleString()} TJS</span>}
+                    {d.capitalization && <span className="badge-green">Капитализация</span>}
+                    {d.early_withdrawal && <span className="badge-green">Досрочное снятие</span>}
+                    {d.insurance && <span className="badge-green">Застрахован</span>}
+                  </div>
+                </div>
+
+                {/* Rate */}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  {d.rate_min && d.rate_min !== d.rate_max && (
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>от {d.rate_min}%</div>
+                  )}
+                  <div style={{ fontSize: 32, fontWeight: 800, color: '#059669', lineHeight: 1 }}>
+                    {d.rate_max}%
+                  </div>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>годовых</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Layout>
+  )
+}
