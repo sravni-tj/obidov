@@ -1,4 +1,10 @@
-fastapi
-uvicorn
-sqlalchemy
-pydantic
+fastapi==0.110.0
+uvicorn==0.27.1
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+alembic==1.13.1
+httpx==0.26.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+apscheduler==3.10.4
